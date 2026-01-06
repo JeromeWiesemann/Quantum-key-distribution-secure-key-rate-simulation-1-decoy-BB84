@@ -67,6 +67,7 @@ class QKDSimulator:
         ### State preparation ###
         R_0 = self.qkd_parameters.R_0 #  [bit/s] Transmission rate (i.e. bits prepared by Alice)
         N = self.qkd_parameters.N # [bit] Number of signals Alice sends
+        asymptotic = self.qkd_parameters.asymptotic # If true, then asymptotic key rate is computed (N is then ignored)
 
         ### Attenuation ###
         eta_ch = self.qkd_parameters.eta_ch # Channel attenuation
@@ -255,14 +256,17 @@ class QKDSimulator:
         """
         if not self.with_vacuum:
             s_X_0_minus = 0
-        l_max = s_X_0_minus + s_X_1_minus * (1 - self.binary_entropy(lambda_X_plus)) - leak_EC - np.log2(2 / epsilon_cor)
         
-        l_max -= 4 * np.log2(15 / (epsilon_sec * pow(2, 1/4)))
+        if not asymptotic:
+            l_max = s_X_0_minus + s_X_1_minus * (1 - self.binary_entropy(lambda_X_plus)) - leak_EC - np.log2(2 / epsilon_cor)
+            l_max -= 4 * np.log2(15 / (epsilon_sec * pow(2, 1/4)))
+        else:
+            l_max = s_X_0_minus + s_X_1_minus * (1 - self.binary_entropy(lambda_X_plus)) - leak_EC
 
         if l_max < 0:
             l_max = 0
 
-        l_max_rate = l_max / integration_time
+        l_max_rate = l_max / integration_time # Note: in the asymptotic case, the division with integration_time cancels with the multiplication with integration_time for the photon number statistics, therefore the block size effectively does not matter in this case, as expected.
 
         return l_max_rate
 
@@ -309,7 +313,8 @@ class QKDSimulator:
         -------
         float
         """
-
+        if self.qkd_parameters.asymptotic:
+            return 0
         if(self.qkd_parameters.concentration_inequalities_method == "Hoeffding"):
             return np.sqrt(n * np.log(1 / epsilon) / 2)
         elif(self.qkd_parameters.concentration_inequalities_method == "Azuma"):
@@ -354,6 +359,8 @@ class QKDSimulator:
         -------
         float
         """
+        if self.qkd_parameters.asymptotic:
+            return 0
         if self.using_improved_serfling:
             return np.sqrt((((c + d)*(1 - b)*b) / (c*d*np.log(2))) * np.log2((c + d) / (c*d*(1 - b)*b*(a**2))))
         else: 

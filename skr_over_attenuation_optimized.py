@@ -36,11 +36,14 @@ def skr_from_param(x):
 
     return -qkdsim.calculate_skr() # return -skr because scipy minimizes -skr and so maximizes skr
 
-for i, nb_signals_sent_exp in enumerate([6, 7, 8, 9, 10, 11, 12, 20]):
+for i, nb_signals_sent_exp in enumerate([6, 7, 8, 9, 10, 11, 12, np.inf]):
     qkdsim = qkdsimulator.QKDSimulator()
     qkdsim.qkd_parameters.concentration_inequalities_method = "Hoeffding"
 
-    nb_signals_sent = pow(10, nb_signals_sent_exp)
+    if nb_signals_sent_exp == np.inf:
+        qkdsim.qkd_parameters.asymptotic = True
+    else:
+        nb_signals_sent = pow(10, nb_signals_sent_exp)
     qkdsim.qkd_parameters.N = nb_signals_sent
 
     secret_key_lengths = []
@@ -68,6 +71,9 @@ for i, nb_signals_sent_exp in enumerate([6, 7, 8, 9, 10, 11, 12, 20]):
         else:
             print("[WARNING]: Unsuccessful optimization!")
 
+    if nb_signals_sent_exp == np.inf:
+        plt.plot(distances, secret_key_lengths, marker = "None", label = rf"N = $\infty$", color=colors[i], linestyle = "--")
+        continue
     plt.plot(distances, secret_key_lengths, marker = "None", label = rf"N = $10^{{{nb_signals_sent_exp}}}$", color=colors[i])
 
 
@@ -75,8 +81,9 @@ plt.xlabel("Attenuation [dB]")
 plt.ylabel("Secure-key rate [bits/s]")
 plt.grid(visible=True, linestyle ="dotted")
 plt.yscale("log")
-plt.ylim(bottom = 1)
+plt.ylim(bottom = 3)
 plt.tick_params(direction="in", top=True, right=True)
+plt.tick_params(direction="in", which = "minor")
 plt.tight_layout()
 plt.legend(loc="upper right")
 plt.savefig("SKR_EUR.pdf", dpi = 400)

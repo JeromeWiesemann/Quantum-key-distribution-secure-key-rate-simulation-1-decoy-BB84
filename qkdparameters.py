@@ -27,6 +27,7 @@ class QKDParameters:
     ### State preparation ###
     R_0 = 625e6 #:  [bit/s] Transmission rate (i.e. bits prepared by Alice)
     N = 1e10 # [bit] Number of signals Alice sends
+    asymptotic = False # If true, then asymptotic key rate is computed (N is then ignored)
 
     ### Attenuation ###
     eta_bob = 1 #: Bob detector efficiency
@@ -46,7 +47,7 @@ class QKDParameters:
 
     ### Detector parameters ###
     DCR = 200 # [Hz] Dark count rate
-    P_err = 0.01 # Detection error due to the light being guided to the wrong detector/timebin
+    P_err = 0.02 # Detection error due to the light being guided to the wrong detector/timebin
 
     ### Mathematical model
     concentration_inequalities_method = "Hoeffding" # Method used to compute the concentration inequalities. Can be "Hoeffding" or "Azuma".
