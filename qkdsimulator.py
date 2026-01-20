@@ -75,8 +75,10 @@ class QKDSimulator:
 
         ### State preparation ###
         R_0 = self.qkd_parameters.R_0 #  [bit/s] Transmission rate (i.e. bits prepared by Alice)
-        N = self.qkd_parameters.N # [bit] Number of signals Alice sends
+        N_alice = self.qkd_parameters.N_alice # [bit] Number of signals Alice sends, this is used when key rates are given for fixed N_alice
+        N_bob = self.qkd_parameters.N_bob # [bit] Post-processing block size, i.e. remaining block size on Bob's side, this is used when key rates are given for fixed N_bob
         asymptotic = self.qkd_parameters.asymptotic # If true, then asymptotic key rate is computed (N is then ignored)
+        fix_alice = self.qkd_parameters.fix_alice # If true, then N_alice is fixed (i.e. the number of signals sent), if false then N_bob is fixed (i.e. the block size)
 
         ### Attenuation ###
         eta_ch = self.qkd_parameters.eta_ch # Channel attenuation
@@ -111,9 +113,6 @@ class QKDSimulator:
 
         """
         ---------- MEASURED DETECTIONS AND ERRORS ----------
-        - Determine the a priori detections and errors without considering the dead time of the detectors
-        - We then "correct" these a priori detections by considering the dead time of the detectors (see https://en.wikipedia.org/wiki/Dead_time or https://arxiv.org/pdf/2507.10361 ;))
-
         All detection rates are given in [bit/s]
         """
 
@@ -128,41 +127,46 @@ class QKDSimulator:
         P_det_mu_1_aprio = (1 - np.exp(-mu_1 * eta_sys) * (1 - P_DC)) # A priori propability of detecting a click given the intensity mu_1
         P_det_mu_2_aprio = (1 - np.exp(-mu_2 * eta_sys) * (1 - P_DC)) # A priori propability of detecting a click given the intensity mu_2
 
-        ### X Basis ###
         # Detection rates
+        ### X Basis ###
         R_X_mu_1 = R_0 * P_XX * P_mu_1 * P_det_mu_1_aprio # Detection rate in X basis with intensity mu_1
         R_X_mu_2 = R_0 * P_XX * P_mu_2 * P_det_mu_2_aprio # Detection rate in X basis with intensity mu_2
         R_X_tot = R_X_mu_1 + R_X_mu_2
 
+        ### Z Basis ###
+        R_Z_mu_1 = R_0 * P_ZZ * P_mu_1 * P_det_mu_1_aprio # Detection rate in Z basis with intensity mu_1
+        R_Z_mu_2 = R_0 * P_ZZ * P_mu_2 * P_det_mu_2_aprio # Detection rate in Z basis with intensity mu_2
+        R_Z_tot = R_Z_mu_1 + R_Z_mu_2
+
+        R_tot = R_X_tot + R_Z_tot
+
         # Nb. of detections
-        integration_time = N / R_X_tot # Time required for Bob to receive N signals
+        ### X Basis ###
+        if fix_alice:
+            integration_time = N_alice / R_0 # Time required for Alice to send N_alice signals
+        else:
+            integration_time = N_bob / R_tot # Time required for Bob to receive N_bob signals
         n_X_mu_1 = integration_time * R_X_mu_1 # Nb. of detections in the X basis with intensity mu_1
         n_X_mu_2 = integration_time * R_X_mu_2 # Nb. of detections in the X basis with intensity mu_2
         n_X = n_X_mu_1 + n_X_mu_2
 
-        # Errors
-        # P_err_mu_1 = (1 - np.exp(-mu_1 * eta_sys))* P_err + P_DC * np.exp(-mu_1 * eta_sys) / 2 # Probability of an error occuring given a detection with intensity mu_1
-        P_err_mu_1 = (1 - np.exp(-mu_1 * eta_sys))* P_err + P_DC / 2 # Probability of an error occuring given a detection with intensity mu_1
-        c_X_mu_1 = integration_time * R_0 * P_XX * P_mu_1 * P_err_mu_1 # Number of errors for detections with intensity mu_1
-
-        # P_err_mu_2 = (1 - np.exp(-mu_2 * eta_sys))* P_err + P_DC * np.exp(-mu_2 * eta_sys) / 2 # Probability of an error occuring given a detection with intensity mu_2
-        P_err_mu_2 = (1 - np.exp(-mu_2 * eta_sys))* P_err + P_DC / 2 # Probability of an error occuring given a detection with intensity mu_2
-        c_X_mu_2 = integration_time * R_0 * P_XX * P_mu_2 * P_err_mu_2 # Number of errors for detections with intensity mu_2
-
-        c_X = c_X_mu_1 + c_X_mu_2 # Total number of errors in the X basis (excluding discarded bits)
-
         ### Z Basis ###
-        # Detection rates (without considering detector dead times)
-        R_Z_mu_1 = R_0 * P_ZZ * P_mu_1 * P_det_mu_1_aprio # Detection rate in Z basis with intensity mu_1
-        R_Z_mu_2 = R_0 * P_ZZ * P_mu_2 * P_det_mu_2_aprio # Detection rate in Z basis with intensity mu_2
-
-        # Nb. of detections
         n_Z_mu_1 = integration_time * R_Z_mu_1 # Nb. of detections in the Z basis with intensity mu_1
         n_Z_mu_2 = integration_time * R_Z_mu_2 # Nb. of detections in the Z basis with intensity mu_2
 
         n_Z = n_Z_mu_1 + n_Z_mu_2
-        
+
         # Errors
+        ### X Basis ###
+        P_err_mu_1 = (1 - np.exp(-mu_1 * eta_sys))* P_err + P_DC / 2 # Probability of an error occuring given a detection with intensity mu_1
+        c_X_mu_1 = integration_time * R_0 * P_XX * P_mu_1 * P_err_mu_1 # Number of errors for detections with intensity mu_1
+
+        P_err_mu_2 = (1 - np.exp(-mu_2 * eta_sys))* P_err + P_DC / 2 # Probability of an error occuring given a detection with intensity mu_2
+        c_X_mu_2 = integration_time * R_0 * P_XX * P_mu_2 * P_err_mu_2 # Number of errors for detections with intensity mu_2
+
+        c_X = c_X_mu_1 + c_X_mu_2 # Total number of errors in the X basis (excluding discarded bits)
+        
+        ### Z Basis ###
         c_Z_mu_1 = integration_time * R_0 * P_ZZ * P_mu_1 * P_err_mu_1 # Number of errors for detections with intensity mu_1
         c_Z_mu_2 = integration_time * R_0 * P_ZZ * P_mu_2 * P_err_mu_2 # Number of errors for detections with intensity mu_2
 

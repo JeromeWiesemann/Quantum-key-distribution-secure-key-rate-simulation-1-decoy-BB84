@@ -26,8 +26,10 @@ class QKDParameters:
 
     ### State preparation ###
     R_0 = 625e6 #:  [bit/s] Transmission rate (i.e. bits prepared by Alice)
-    N = 1e10 # [bit] Number of signals Alice sends
-    asymptotic = False # If true, then asymptotic key rate is computed (N is then ignored)
+    N_alice = 1e10 # [bit] Number of signals Alice sends, this is used when key rates are given for fixed N_alice
+    N_bob = 1e5 # [bit] Post-processing block size, i.e. remaining block size on Bob's side, this is used when key rates are given for fixed N_bob
+    asymptotic = False # If true, then asymptotic key rate is computed (N_alice and N_bob are then ignored)
+    fix_alice = True # If true, then N_alice is fixed (i.e. the number of signals sent), if false then N_bob is fixed (i.e. the block size)
 
     ### Attenuation ###
     eta_bob = 1 #: Bob detector efficiency
@@ -82,7 +84,10 @@ class QKDParameters:
             self.P_mu_2 = 1 - self.P_mu_1
 
             self.R_0 = data["R_0"]
-            self.N = data["N"]
+            self.N_alice = data["N_alice"]
+            self.N_bob = data["N_bob"]
+            self.asymptotic = data["asymptotic"]
+            self.fix_alice = data["fix_alice"]
 
             self.eta_bob = data["eta_bob"]
             self.alpha = data["alpha"]
