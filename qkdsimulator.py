@@ -13,6 +13,15 @@ import numpy as np
 from math import factorial
 
 
+def clip(a, b, x):
+    """
+    Clip the value `x` when it is outside of interval `[a, b]`.
+    """
+    assert a < b
+    x_new = max(a, min(b, x))
+    return x_new
+
+
 class QKDSimulator:
 
     qkd_parameters = QKDParameters() #: Class containing all the parameters used to run the QKDSimulator
@@ -103,9 +112,9 @@ class QKDSimulator:
         """
         ---------- MEASURED DETECTIONS AND ERRORS ----------
         - Determine the a priori detections and errors without considering the dead time of the detectors
-        - We then "correct" these a priori detections by considering the dead time of the detectors (see https://en.wikipedia.org/wiki/Dead_time)
+        - We then "correct" these a priori detections by considering the dead time of the detectors (see https://en.wikipedia.org/wiki/Dead_time or https://arxiv.org/pdf/2507.10361 ;))
 
-        All detection rates are given in [bits/s]
+        All detection rates are given in [bit/s]
         """
 
         if mu_1 <= mu_2: # This is to avoid constraints when optimizing the parameters (using scipy.minimize() for example) as the security proof assumes that mu_1 > mu_2
@@ -114,7 +123,7 @@ class QKDSimulator:
         P_ZZ = P_Z_alice * P_Z_bob
         P_XX = P_X_alice * P_X_bob
 
-        P_DC = DCR / R_0 # Dark count probability per pulse
+        P_DC = DCR / R_0 # Dark count probability per qubit
 
         P_det_mu_1_aprio = (1 - np.exp(-mu_1 * eta_sys) * (1 - P_DC)) # A priori propability of detecting a click given the intensity mu_1
         P_det_mu_2_aprio = (1 - np.exp(-mu_2 * eta_sys) * (1 - P_DC)) # A priori propability of detecting a click given the intensity mu_2
@@ -123,18 +132,21 @@ class QKDSimulator:
         # Detection rates
         R_X_mu_1 = R_0 * P_XX * P_mu_1 * P_det_mu_1_aprio # Detection rate in X basis with intensity mu_1
         R_X_mu_2 = R_0 * P_XX * P_mu_2 * P_det_mu_2_aprio # Detection rate in X basis with intensity mu_2
+        R_X_tot = R_X_mu_1 + R_X_mu_2
 
         # Nb. of detections
-        integration_time = N / R_0 # Time required for Alice to send N signals
+        integration_time = N / R_X_tot # Time required for Bob to receive N signals
         n_X_mu_1 = integration_time * R_X_mu_1 # Nb. of detections in the X basis with intensity mu_1
         n_X_mu_2 = integration_time * R_X_mu_2 # Nb. of detections in the X basis with intensity mu_2
         n_X = n_X_mu_1 + n_X_mu_2
 
         # Errors
-        P_err_mu_1 = (1 - np.exp(-mu_1 * eta_sys))* P_err + P_DC * np.exp(-mu_1 * eta_sys) / 2 # Probability of an error occuring given a detection with intensity mu_1
+        # P_err_mu_1 = (1 - np.exp(-mu_1 * eta_sys))* P_err + P_DC * np.exp(-mu_1 * eta_sys) / 2 # Probability of an error occuring given a detection with intensity mu_1
+        P_err_mu_1 = (1 - np.exp(-mu_1 * eta_sys))* P_err + P_DC / 2 # Probability of an error occuring given a detection with intensity mu_1
         c_X_mu_1 = integration_time * R_0 * P_XX * P_mu_1 * P_err_mu_1 # Number of errors for detections with intensity mu_1
 
-        P_err_mu_2 = (1 - np.exp(-mu_2 * eta_sys))* P_err + P_DC * np.exp(-mu_2 * eta_sys) / 2 # Probability of an error occuring given a detection with intensity mu_2
+        # P_err_mu_2 = (1 - np.exp(-mu_2 * eta_sys))* P_err + P_DC * np.exp(-mu_2 * eta_sys) / 2 # Probability of an error occuring given a detection with intensity mu_2
+        P_err_mu_2 = (1 - np.exp(-mu_2 * eta_sys))* P_err + P_DC / 2 # Probability of an error occuring given a detection with intensity mu_2
         c_X_mu_2 = integration_time * R_0 * P_XX * P_mu_2 * P_err_mu_2 # Number of errors for detections with intensity mu_2
 
         c_X = c_X_mu_1 + c_X_mu_2 # Total number of errors in the X basis (excluding discarded bits)
@@ -163,28 +175,28 @@ class QKDSimulator:
 
         ### X Basis ###
         # Detections
-        n_X_mu_1_plus = n_X_mu_1 + self.concentration_ineq_deviation(n_X, epsilon_1)
+        n_X_mu_1_plus = clip(0, n_X, n_X_mu_1 + self.concentration_ineq_deviation(n_X, epsilon_1))
         
-        n_X_mu_2_minus = max(n_X_mu_2 - self.concentration_ineq_deviation(n_X, epsilon_1), 0)
+        n_X_mu_2_minus = clip(0, n_X, n_X_mu_2 - self.concentration_ineq_deviation(n_X, epsilon_1))
 
         # Errors
-        c_X_mu_1_plus = c_X_mu_1 + self.concentration_ineq_deviation(c_X, epsilon_2)
+        c_X_mu_1_plus = clip(0, c_X, c_X_mu_1 + self.concentration_ineq_deviation(c_X, epsilon_2))
 
-        c_X_mu_2_plus = c_X_mu_2 + self.concentration_ineq_deviation(c_X, epsilon_2)
-        c_X_mu_2_minus = max(c_X_mu_2 - self.concentration_ineq_deviation(c_X, epsilon_2), 0)
+        c_X_mu_2_plus = clip(0, c_X, c_X_mu_2 + self.concentration_ineq_deviation(c_X, epsilon_2))
+        c_X_mu_2_minus = clip(0, c_X, c_X_mu_2 - self.concentration_ineq_deviation(c_X, epsilon_2))
 
         ### Z Basis ###
         # Detections
-        n_Z_mu_1_plus = n_Z_mu_1 + self.concentration_ineq_deviation(n_Z, epsilon_1)
+        n_Z_mu_1_plus = clip(0, n_Z, n_Z_mu_1 + self.concentration_ineq_deviation(n_Z, epsilon_1))
         
-        n_Z_mu_2_minus = max(n_Z_mu_2 - self.concentration_ineq_deviation(n_Z, epsilon_1), 0)
+        n_Z_mu_2_minus = clip(0, n_Z, n_Z_mu_2 - self.concentration_ineq_deviation(n_Z, epsilon_1))
 
         # Errors
-        c_Z_mu_1_plus = c_Z_mu_1 + self.concentration_ineq_deviation(c_Z, epsilon_2)
+        c_Z_mu_1_plus = clip(0, c_Z, c_Z_mu_1 + self.concentration_ineq_deviation(c_Z, epsilon_2))
 
-        c_Z_mu_2_plus = c_Z_mu_2 + self.concentration_ineq_deviation(c_Z, epsilon_2)
+        c_Z_mu_2_plus = clip(0, c_Z, c_Z_mu_2 + self.concentration_ineq_deviation(c_Z, epsilon_2))
 
-        c_Z_mu_2_minus = max(c_Z_mu_2 - self.concentration_ineq_deviation(c_Z, epsilon_2), 0)
+        c_Z_mu_2_minus = clip(0, c_Z, c_Z_mu_2 - self.concentration_ineq_deviation(c_Z, epsilon_2))
 
         """
         ---------- BOUNDS ON PHOTON EVENTS AND ERRORS ----------
@@ -193,38 +205,33 @@ class QKDSimulator:
 
         ### Lower bound on the nb. of vacuum events ###
         s_X_0_minus = (self.tau(0) / (mu_1 - mu_2)) * (mu_1 * np.exp(mu_2) * n_X_mu_2_minus / P_mu_2 - mu_2 * np.exp(mu_1) * n_X_mu_1_plus / P_mu_1) # X basis
-        if s_X_0_minus < 0:
-            s_X_0_minus = 0
+        s_X_0_minus = clip(0, n_X, s_X_0_minus)
         
         ### Upper bound on the nb. of vaccum events ###
         # REVIEW: Here we can plug in the intensity mu that gives the highest secret key rate
         s_X_0_plus_mu_1 = 2 * (self.tau(0) * (np.exp(mu_1) / P_mu_1) * c_X_mu_1_plus + self.concentration_ineq_deviation(n_X, epsilon_1)) 
         s_X_0_plus_mu_2 = 2 * (self.tau(0) * (np.exp(mu_2) / P_mu_2) * c_X_mu_2_plus + self.concentration_ineq_deviation(n_X, epsilon_1))
         s_X_0_plus = min(s_X_0_plus_mu_1, s_X_0_plus_mu_2) # X basis
-        if s_X_0_plus < 0:
-            s_X_0_plus = 0
+        s_X_0_plus = clip(0, n_X, s_X_0_plus)
 
         s_Z_0_plus_mu_1 = 2 * (self.tau(0) * (np.exp(mu_1) / P_mu_1) * c_Z_mu_1_plus + self.concentration_ineq_deviation(n_Z, epsilon_1))
         s_Z_0_plus_mu_2 = 2 * (self.tau(0) * (np.exp(mu_2) / P_mu_2) * c_Z_mu_2_plus + self.concentration_ineq_deviation(n_Z, epsilon_1))
         s_Z_0_plus = min(s_Z_0_plus_mu_1, s_Z_0_plus_mu_2) # Z basis
-        if s_Z_0_plus < 0:
-            s_Z_0_plus = 0
+        s_Z_0_plus = clip(0, n_Z, s_Z_0_plus)
 
         ### Lower bound on the nb. of single photon events ###
         s_X_1_minus = (mu_1 * self.tau(1) / (mu_2 * (mu_1 - mu_2))) * (np.exp(mu_2) * n_X_mu_2_minus / P_mu_2 - (pow(mu_2, 2) / pow(mu_1, 2)) * (np.exp(mu_1) * n_X_mu_1_plus) / P_mu_1 - (pow(mu_1, 2) - pow(mu_2, 2)) / (pow(mu_1, 2) * self.tau(0)) * s_X_0_plus) # X basis
-        if s_X_1_minus < 0:
-            s_X_1_minus = 0
+        s_X_1_minus = clip(0, n_X, s_X_1_minus)
+
         s_Z_1_minus = (mu_1 * self.tau(1) / (mu_2 * (mu_1 - mu_2))) * (np.exp(mu_2) * n_Z_mu_2_minus / P_mu_2 - (pow(mu_2, 2) / pow(mu_1, 2)) * (np.exp(mu_1) * n_Z_mu_1_plus) / P_mu_1 - (pow(mu_1, 2) - pow(mu_2, 2)) / (pow(mu_1, 2) * self.tau(0)) * s_Z_0_plus) # Z basis
-        if s_Z_1_minus < 0:
-            s_Z_1_minus = 0 
+        s_Z_1_minus = clip(0, n_Z, s_Z_1_minus)
 
         ### Upper bound on the nb. of single photon errors ###
         v_X_1_plus = (self.tau(1) / (mu_1 - mu_2)) * (np.exp(mu_1) * c_X_mu_1_plus / P_mu_1 - np.exp(mu_2) * c_X_mu_2_minus / P_mu_2) # X basis
-        if v_X_1_plus < 0:
-            v_X_1_plus = 0
+        v_X_1_plus = clip(0, n_X, v_X_1_plus) # Not needed
+
         v_Z_1_plus = (self.tau(1) / (mu_1 - mu_2)) * (np.exp(mu_1) * c_Z_mu_1_plus / P_mu_1 - np.exp(mu_2) * c_Z_mu_2_minus / P_mu_2) # Z basis
-        if v_Z_1_plus < 0:
-            v_Z_1_plus = 0
+        v_Z_1_plus = clip(0, n_Z, v_Z_1_plus)
 
         ### Upper bound on the QBER ###
         if s_Z_1_minus > 0:
@@ -258,8 +265,8 @@ class QKDSimulator:
             s_X_0_minus = 0
         
         if not asymptotic:
-            l_max = s_X_0_minus + s_X_1_minus * (1 - self.binary_entropy(lambda_X_plus)) - leak_EC - np.log2(2 / epsilon_cor)
-            l_max -= 4 * np.log2(15 / (epsilon_sec * pow(2, 1/4)))
+            l_max = s_X_0_minus + s_X_1_minus * (1 - self.binary_entropy(lambda_X_plus)) - leak_EC - np.log2(2 / epsilon_cor) \
+                    - 4 * np.log2(15 / (epsilon_sec * pow(2, 1/4)))
         else:
             l_max = s_X_0_minus + s_X_1_minus * (1 - self.binary_entropy(lambda_X_plus)) - leak_EC
 
@@ -276,7 +283,7 @@ class QKDSimulator:
     """
 
     def eta_to_db(self, eta):
-        """Converts an attenuation :math:`\eta` in percent to an attenuation in decibels.
+        """Converts an attenuation :math:`\\eta` in percent to an attenuation in decibels.
 
         .. math::
 
@@ -300,7 +307,7 @@ class QKDSimulator:
 
         .. math::
 
-            \\delta(n,\\epsilon)=\\sqrt{2\\log(1/\\epsilon)/n}
+            \\delta(n,\\epsilon)=\\sqrt{n\\log(1/\\epsilon)/2}
 
         Parameters
         ----------
@@ -346,7 +353,7 @@ class QKDSimulator:
 
         .. math::
 
-            \\gamma(a, b, c, d) = \\sqrt{\\frac{(c+d)(1-b)b}{cd\ln 2} \\log_2\\left(\\frac{c+d}{cd(1-b)b} \\frac{1}{a^2}\\right)}
+            \\gamma(a, b, c, d) = \\sqrt{\\frac{(c+d)(1-b)b}{cd\\ln 2} \\log_2\\left(\\frac{c+d}{cd(1-b)b} \\frac{1}{a^2}\\right)}
             
 
     

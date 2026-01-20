@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 
-num_curves = 8
+num_curves = 6
 colors = cm.viridis_r(np.linspace(0, 1, num_curves))
 
 plt.rcParams.update({
@@ -36,7 +36,7 @@ def skr_from_param(x):
 
     return -qkdsim.calculate_skr() # return -skr because scipy minimizes -skr and so maximizes skr
 
-for i, nb_signals_sent_exp in enumerate([6, 7, 8, 9, 10, 11, 12, np.inf]):
+for i, nb_signals_sent_exp in enumerate([5, 6, 7, 8, 9, np.inf]):
     qkdsim = qkdsimulator.QKDSimulator()
     qkdsim.qkd_parameters.concentration_inequalities_method = "Hoeffding"
 
